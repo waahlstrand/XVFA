@@ -89,6 +89,9 @@ class KeypointModel(nn.Module):
             nn.Sigmoid()
         )
 
+    def __call__(self, *args: Any, **kwds: Any) -> Tuple[Tensor, Tensor]:
+        return super().__call__(*args, **kwds)
+
     def forward(self, z: Tensor) -> Tuple[Tensor, Tensor]:
 
         # Predict the deviations from the base shape
@@ -145,8 +148,11 @@ class SingleVertebraClassifierModel(nn.Module):
             nn.Linear(512, self.n_grades),
         )
 
+    def __call__(self, *args: Any, **kwds: Any) -> Tuple[PointPrediction, Tensor, Tensor]:
+        return super().__call__(*args, **kwds)
+
         
-    def forward(self, x) -> VertebraOutput:
+    def forward(self, x) -> Tuple[PointPrediction, Tensor, Tensor]:
 
         z               = self.features(x)
         # mu, sigma       = self.keypoint_model(z).chunk(2, dim=1)
@@ -263,7 +269,7 @@ class SingleVertebraClassifier(L.LightningModule):
         self.validation_true = []
         self.validation_pred = []
 
-    def __call__(self, *args: Any, **kwds: Any) -> VertebraOutput:
+    def __call__(self, *args: Any, **kwds: Any) -> VertebraPrediction:
         return super().__call__(*args, **kwds)
     
     def step(self, batch: Batch, batch_idx: int, name: str = "", **kwargs) -> Dict[str, Tensor]:
