@@ -156,13 +156,8 @@ class SingleVertebraClassifierModel(nn.Module):
         type_logits     = self.type_model(z)
         grade_logits    = self.grade_model(z)
 
-        output = VertebraOutput(
-            keypoints=Prediction(mu, sigma),
-            type_logits=type_logits,
-            grade_logits=grade_logits,
-        )
 
-        return output
+        return PointPrediction(mu=mu, sigma=sigma), grade_logits, type_logits
 
 class SingleVertebraClassifier(L.LightningModule):
 
@@ -273,58 +268,29 @@ class SingleVertebraClassifier(L.LightningModule):
     def __call__(self, *args: Any, **kwds: Any) -> VertebraPrediction:
         return super().__call__(*args, **kwds)
     
-    def step(self, batch: Batch, batch_idx: int, name: str = "", **kwargs) -> Dict[str, Tensor]:
+    def step(self, batch: Batch, batch_idx: int, name: str = "", **kwargs) -> VertebraModelOutput:
         
-        x, y = batch.x, batch.y
-        keypoints   = torch.stack([target.keypoints for target in y]).squeeze(1)
-        types       = torch.stack([target.labels for target in y]).squeeze(1)
-        grades      = torch.stack([target.visual_grades for target in y]).squeeze(1)
+        images = batch.images
+        keypoints, types, grades = batch.keypoints, batch.visual_grades, batch.morphological_grades
         
-        # Augment
-        x, keypoints = self.augmentations[name](x, keypoints)
+        # Augment the images with keypoints
+        x, keypoints = self.augmentations[name](images, keypoints)
 
         # Compute keypoints and uncertainty
-        output = self(x)
+        prediction = self(images)
 
-        # Get classifications from image features
-        image_type_logits    = output.type_logits
-        image_grade_logits   = output.grade_logits
+        keypoints       = keypoints.reshape(*prediction.keypoints.mu.shape)
 
-        keypoints       = keypoints.reshape(*output.keypoints.mu.shape)
-
-        # Get classification from keypoints
-        keypoint_logits         = self.classifier(output.keypoints.mu)
-        keypoint_type_logits    = keypoint_logits.type_logits
-        keypoint_grade_logits   = keypoint_logits.grade_logits
-
-        # Residual log-likelihood estimation, estimates the likelihood of the keypoint positions
-        rle_loss            = self.rle(output.keypoints.mu, output.keypoints.sigma, keypoints)
-       
-        # Cross-entropy loss from keypoints
-        ce_keypoint_loss    = self.type_cross_entropy(keypoint_type_logits, types)
-        ce_keypoint_loss   += self.grade_cross_entropy(keypoint_grade_logits, grades)
-
-        # Cross-entropy loss predicted from image features
-        ce_image_loss       = self.type_cross_entropy(image_type_logits, types)
-        ce_image_loss      += self.grade_cross_entropy(image_grade_logits, grades)
-
-        # Total loss
-        loss = self.rle_weight * rle_loss + self.ce_keypoint_weight * ce_keypoint_loss + self.ce_image_weight * ce_image_loss
+        # Compute the loss
+        loss = self.vertebra_loss(prediction, keypoints, grades, types)
 
         # Distance measure between mu and y
-        distance = self.distance(output.keypoints.mu.detach(), keypoints.detach())
-
-        # Get class predictions
-        grades_pred = self.prediction(keypoint_grade_logits, image_grade_logits)
-        types_pred  = self.prediction(keypoint_type_logits, image_type_logits)
+        distance = self.distance(prediction.keypoints.mu.detach(), keypoints.detach())
 
         # Calculate mean standard deviation
-        std = output.keypoints.sigma.mean()
+        std = prediction.keypoints.sigma.mean()
 
         # Log all losses
-        self.log(f"{name}/rle_loss", rle_loss, **kwargs)
-        self.log(f"{name}/ce_keypoint_loss", ce_keypoint_loss, **kwargs)
-        self.log(f"{name}/ce_image_loss", ce_image_loss, **kwargs)
         self.log(f"{name}/loss", loss, **kwargs)
         self.log(f"{name}/distance", distance, **kwargs)
         self.log(f"{name}/std", std, **kwargs)
@@ -393,37 +359,25 @@ class SingleVertebraClassifier(L.LightningModule):
         return pred
         
     def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, Tensor]:
-        output = self.step(batch, batch_idx, name="train_stage", prog_bar=False, on_epoch=True, on_step=True, batch_size=batch.x.shape[0])
+        output = self.step(batch, batch_idx, name="train_stage", prog_bar=False, on_epoch=True, on_step=True, batch_size=batch.images.shape[0])
 
         return output
     
     def validation_step(self, batch: Batch, batch_idx: int) -> Dict[str, Tensor]:
         
-        output = self.step(batch, batch_idx, name="val_stage", prog_bar=False, on_epoch=True, on_step=False, batch_size=batch.x.shape[0])
+        output = self.step(batch, batch_idx, name="val_stage", prog_bar=False, on_epoch=True, on_step=False, batch_size=batch.images.shape[0])
 
-        val_types_true = output["types"]
-        val_grades_true = output["grades"]
-
-        val_types_pred = output["pred_types"]
-        val_grades_pred = output["pred_grades"]
-
-        self.validation_true.append((val_types_true, val_grades_true))
-        self.validation_pred.append((val_types_pred, val_grades_pred))
+        self.validation_true.append((output.true.types, output.true.grades))
+        self.validation_pred.append((output.prediction.types, output.prediction.grades))
 
         return output
     
     def test_step(self, batch: Batch, batch_idx: int, dataloader_idx: int = 0) -> Dict[str, Tensor]:
 
-        output = self.step(batch, batch_idx, name="test_stage", prog_bar=False, on_epoch=True, on_step=False, batch_size=batch.x.shape[0])
+        output = self.step(batch, batch_idx, name="test_stage", prog_bar=False, on_epoch=True, on_step=False, batch_size=batch.images.shape[0])
 
-        test_types_true = output["types"]
-        test_grades_true = output["grades"]
-
-        test_types_pred = output["pred_types"]
-        test_grades_pred = output["pred_grades"]
-
-        self.test_true.append((test_types_true, test_grades_true))
-        self.test_pred.append((test_types_pred, test_grades_pred))
+        self.test_true.append((output.true.types, output.true.grades))
+        self.test_pred.append((output.prediction.types, output.prediction.grades))
 
         return output
 
