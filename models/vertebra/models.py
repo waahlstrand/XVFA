@@ -62,19 +62,6 @@ class KeypointModel(nn.Module):
     def __init__(self, dim: int, n_keypoints: int = 6, n_dim: int = 2) -> None:
         super().__init__()
 
-        # Assume a base shape
-        self.anchors = nn.Parameter(
-            torch.tensor([
-                [0.25, 0.2],
-                [0.25, 0.8],
-                [0.5, 0.2],
-                [0.5, 0.8],
-                [0.75, 0.2],
-                [0.75,0.8],
-            ]).unsqueeze(0).float(),
-            requires_grad=False
-        )
-
         self.dim = dim
         self.n_keypoints = n_keypoints
         self.n_dim = n_dim
