@@ -10,6 +10,15 @@ from typing import *
 class RLELoss(nn.Module):
 
     def __init__(self, n_keypoints: int = 6, n_dims: int = 2, prior: Literal["laplace", "gaussian"] = "laplace") -> None:
+        """
+        The loss function for the RLE prediction. The loss function is the negative log-likelihood of the keypoint
+        where the likelihood is calculated using a normalizing flow.
+
+        Args:
+            n_keypoints (int, optional): The number of keypoints to predict. Defaults to 6.
+            n_dims (int, optional): The number of dimensions of the keypoints. Defaults to 2.
+            prior (Literal["laplace", "gaussian"], optional): The prior distribution for the RLE loss. Defaults to "laplace".
+        """
         
         super().__init__()
         self.eps = 1e-9
