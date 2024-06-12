@@ -225,16 +225,25 @@ class SingleVertebraClassifier(L.LightningModule):
             model_weights=model_weights,
             )
 
-        # print("Compiling model...")
-        # self.model = torch.compile(self.model, mode="reduce-overhead")
-        # print("Done.")
+        # Keypoint-based classifier
+        self.classifier     = FuzzyWedgeClassifier(tolerances=self.tolerances, thresholds=self.thresholds, trainable=trainable_classifier)
 
-        self.classifier             = FuzzyWedgeClassifier(tolerances=self.tolerances, thresholds=self.thresholds, trainable=trainable_classifier)
-        self.rle                    = RLELoss(prior=self.prior)
-        self.grade_cross_entropy    = nn.CrossEntropyLoss(weight=self.grade_weights)
-        self.type_cross_entropy     = nn.CrossEntropyLoss(weight=self.type_weights)
-        self.distance               = mse_loss if self.prior == "gaussian" else l1_loss
+        # Loss function
+        self.vertebra_loss  = VertebraLoss(n_keypoints=self.n_keypoints, 
+                                           n_dims=2, prior=self.prior, 
+                                           grade_weights=self.grade_weights, 
+                                           type_weights=self.type_weights, 
+                                           rle_weight=self.rle_weight, 
+                                           ce_image_weight=self.ce_image_weight, 
+                                           ce_keypoint_weight=self.ce_keypoint_weight)
+        
+        # Compatibility
+        # self.rle = self.vertebra_loss.rle
+        # self.grade_cross_entropy = self.vertebra_loss.ce_grade
+        # self.type_cross_entropy = self.vertebra_loss.ce_type
 
+        # Define metrics used for classification
+        self.distance       = mse_loss if self.prior == "gaussian" else l1_loss
         metrics = {}
         for k in ["val_stage", "test_stage"]:
             ms = {}
