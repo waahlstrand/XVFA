@@ -8,6 +8,16 @@ from torch import Tensor
 import torch
 from models.vertebra.classifiers import VertebraParameters
 
+def transparent_cmap(cmap, N=255):
+    "Copy colormap and set alpha values"
+
+    mycmap = cmap
+    mycmap._init()
+    mycmap._lut[:,-1] = np.linspace(0, 0.4, N+4)
+    # Use logarithmic scale
+    # mycmap._lut[:,-1] = np.logspace(1, 0.1, N+4)
+    return mycmap
+
 def grouped_classes(
         y_true: np.ndarray,
         y_pred: np.ndarray,
