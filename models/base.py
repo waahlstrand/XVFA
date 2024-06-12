@@ -1,5 +1,5 @@
 from typing import *
-from data.types import Batch, Output
+from utils.types import Batch, Output
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -91,8 +91,7 @@ class Detector(L.LightningModule):
         
         loss, output = self.step(batch, batch_idx, name="test_stage", batch_size=self.batch_size, prog_bar=False, on_step=False, on_epoch=True)
 
-        x, y = batch.x, batch.y
-        sizes  = batch.original_sizes
+        x, y, sizes = batch.x, batch.y, batch.original_sizes
 
         # Format the output to be compatible with the postprocessor
         #    output = {f"pred_{k}": v for k, v in output.items()}
