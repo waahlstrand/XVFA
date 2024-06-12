@@ -6,11 +6,21 @@ from data.types import *
 
 class VertebraParameters(nn.Module):
 
+
     def __init__(self):
 
         super().__init__()
 
-    def forward(self, vertebrae: Tensor):
+    def forward(self, vertebrae: Tensor) -> Dict[str, Tensor]:
+        """
+        A model to compute the morphological parameters of the vertebrae.
+
+        Args:
+            vertebrae (Tensor): Vertebra to compute the parameters, with anterior, middle and posterior points (B, 6, 2).
+
+        Returns:
+            Dict[str, Tensor]: Dictionary with the morphological parameters `ha`, `hp`, `hm`, `apr`, `mpr`, `mar`.
+        """
 
         vertebrae   = vertebrae.reshape(-1, 6, 2)
 
@@ -49,8 +59,7 @@ class CrispClassifier(nn.Module):
         Classify the type of the vertebra depending on its shape.
 
         Args:
-            vertebrae (Tensor): Vertebra to classify, with anterior, middle and posterior points.
-            Shape: (B, 6, 2)
+            vertebrae (Tensor): Vertebra to classify, with anterior, middle and posterior points (B, 6, 2).
 
         """
         posterior   = vertebrae[:, 0:2, :]
@@ -125,6 +134,15 @@ class VertebraClassifier(nn.Module):
 
 
     def within(self, apr: Tensor, mpr: Tensor, mar: Tensor, tolerance_idx: int = 1) -> Tensor:
+        """
+        Fuzzy approximation to check if the vertebrae is within the given tolerance.
+        
+        Args:
+            apr (Tensor): Anterior/posterior ratio (N,1)
+            mpr (Tensor): Middle/posterior ratio (N,1)
+            mar (Tensor): Middle/anterior ratio (N,1)
+            tolerance_idx (int): Index of the tolerance to use.
+        """
 
         apr_pos_thresh = self.thresholds["apr"]*(1-self.tolerances["apr"][tolerance_idx])
         mpr_pos_thresh = self.thresholds["mpr"]*(1-self.tolerances["mpr"][tolerance_idx])
@@ -146,12 +164,29 @@ class VertebraClassifier(nn.Module):
         return is_within
     
     def geq(self, x: Tensor, value: Tensor) -> Tensor:
+        """
+        Fuzzy approximation to check if x is greater or equal to a value.
+        
+        Args:
+            x (Tensor): Value to compare (N,1)
+            value (Tensor): Value to compare against (N,1)
+        """
 
         return F.sigmoid((x - value))
     
     def leq(self, x: Tensor, value: Tensor) -> Tensor:
+        """
+        Fuzzy approximation to check if x is less or equal to a value.
+
+        Args:
+            x (Tensor): Value to compare (N,1)
+            value (Tensor): Value to compare against (N,1)
+        """
 
         return F.sigmoid((value - x))
+    
+    def __call__(self, *args: Any, **kwds: Any) -> VertebraOutput:
+        return super().__call__(*args, **kwds)
 
     def forward(self, vertebrae: Tensor) -> VertebraOutput:
 
@@ -183,33 +218,33 @@ class VertebraClassifier(nn.Module):
         grad_1, ind = torch.stack([
             self.within(apr, mpr, mar, tolerance_idx=1), # e.g. within  0.75, 1.25
             1-normal
-        ], dim=1).min(dim=1)
+        ], dim=1).min(dim=1) # and
 
         grad_2, ind = torch.stack([
             self.within(apr, mpr, mar, tolerance_idx=2), # e.g.  within 0.6, 1.4
             1-normal,
             1-grad_1
-        ], dim=1).min(dim=1)
+        ], dim=1).min(dim=1) # and
 
         grad_3, ind = torch.stack([
             1-normal,
             1-grad_1,
             1-grad_2
-        ], dim=1).min(dim=1)
+        ], dim=1).min(dim=1) # and
 
         crush, ind = torch.stack([
             mpr_pos, 
             mar_neg, 
             apr_pos, 
             1-normal, 
-            ], dim=1).min(dim=1)
+            ], dim=1).min(dim=1) # and
 
         biconcave, ind = torch.stack([
             mpr_neg, 
             mar_neg, 
             1-normal, 
             1-crush, 
-            ], dim=1).min(dim=1)
+            ], dim=1).min(dim=1) # and
 
         wedge, ind = torch.stack([
             mpr_neg, 
@@ -218,7 +253,7 @@ class VertebraClassifier(nn.Module):
             1-normal, 
             1-crush, 
             1-biconcave
-            ], dim=1).min(dim=1)
+            ], dim=1).min(dim=1) # and
 
         type_logits = torch.stack([normal, wedge, biconcave, crush], dim=-1) 
 
