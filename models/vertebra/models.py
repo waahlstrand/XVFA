@@ -43,6 +43,9 @@ class Augmenter(nn.Module):
             data_keys=["image", "keypoints"],
         )
 
+    def __call__(self, *args: Any, **kwds: Any) -> Tuple[Tensor, Tensor]:
+        return super().__call__(*args, **kwds)       
+
     def forward(self, image: Tensor, keypoints: Tensor, use_geometric: bool = False) -> Tuple[Tensor, Tensor]:
 
         image, keypoints = self.augmenter(image, keypoints)
