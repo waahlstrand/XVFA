@@ -3,9 +3,84 @@ from torch import Tensor
 import torch
 import torch.nn as nn
 import math
-
+from utils.types import *
 from typing import *
 
+class VertebraLoss(nn.Module):
+
+    def __init__(self, 
+                 n_keypoints: int = 6, 
+                 n_dims: int = 2, 
+                 prior: Literal["laplace", "gaussian"] = "laplace",
+                 grade_weights: Optional[List[float]] = None,
+                 type_weights: Optional[List[float]] = None,
+                 rle_weight: float = 1.0, 
+                 ce_image_weight: float = 1.0,
+                 ce_keypoint_weight: float = 1.0,
+                 ) -> None:
+        """
+        The loss function for the fine vertebra model. The loss function is a weighted sum of the following components:
+        
+        1. The RLE loss: The loss function for the keypoint prediction. The RLE loss is the negative log-likelihood of the keypoint
+        where the likelihood is calculated using a normalizing flow. 
+        2. The cross-entropy loss for the classification based on image features
+        3. The cross-entropy loss for the classification based on keypoints
+
+        Args:
+            n_keypoints (int, optional): The number of keypoints to predict. Defaults to 6.
+            n_dims (int, optional): The number of dimensions of the keypoints. Defaults to 2.
+            prior (Literal["laplace", "gaussian"], optional): The prior distribution for the RLE loss. Defaults to "laplace".
+            grade_weights (Optional[List[float]], optional): The weights for the grade classification. Defaults to None.
+            type_weights (Optional[List[float]], optional): The weights for the type classification. Defaults to None.
+            rle_weight (float, optional): The weight for the RLE loss. Defaults to 1.0.
+            ce_image_weight (float, optional): The weight for the cross-entropy loss for the image features. Defaults to 1.0.
+            ce_keypoint_weight (float, optional): The weight for the cross-entropy loss for the keypoints. Defaults to 1.0.
+        """
+        
+        super().__init__()
+
+        self.rle_weight = rle_weight
+        self.ce_image_weight = ce_image_weight
+        self.ce_keypoint_weight = ce_keypoint_weight
+        self.grade_weights = torch.FloatTensor(grade_weights) if grade_weights is not None else None
+        self.type_weights  = torch.FloatTensor(type_weights) if type_weights is not None else None
+        self.rle = RLELoss(n_keypoints=n_keypoints, n_dims=n_dims, prior=prior)
+        self.ce_grade = nn.CrossEntropyLoss(weight=self.grade_weights)
+        self.ce_type = nn.CrossEntropyLoss(weight=self.type_weights)
+
+
+    def forward(self,
+                prediction: VertebraPrediction,
+                keypoints: Tensor,
+                grades: Tensor,
+                types: Tensor,
+                ) -> Tensor:
+        """
+        Calculate the loss for the fine vertebra model.
+
+        Args:
+            prediction (VertebraPrediction): The prediction from the model
+            keypoints (Tensor): The ground truth keypoints
+            grades (Tensor): The ground truth grades
+            types (Tensor): The ground truth types
+        
+        Returns:
+            Tensor: The loss
+        """
+        
+        rle = self.rle(prediction.keypoints.mu, prediction.keypoints.sigma, keypoints)
+
+        ce_keypoint_loss    = self.ce_type(prediction.keypoint_logits.types, types)
+        ce_keypoint_loss   += self.ce_grade(prediction.keypoint_logits.grades, grades)
+
+        ce_image_loss       = self.ce_type(prediction.image_logits.types, types)
+        ce_image_loss      += self.ce_grade(prediction.image_logits.grades, grades)
+
+        loss =  self.rle_weight * rle + \
+                self.ce_image_weight * ce_image_loss + \
+                self.ce_keypoint_weight * ce_keypoint_loss
+
+        return loss
 
 class RLELoss(nn.Module):
 
