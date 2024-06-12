@@ -1,23 +1,18 @@
-from typing import Optional, Union
+from typing import Optional
 import torch
 from torch import nn
 import lightning as L
-from torch.optim.optimizer import Optimizer
 from torchvision.models import resnet18, resnet50, swin_v2_t, Swin_V2_T_Weights, ResNet18_Weights, ResNet50_Weights
 from models.vertebra.classifiers import FuzzyWedgeClassifier
-from models.vertebra.criterion import RLELoss
+from models.vertebra.criterion import VertebraLoss
 from torch.nn.functional import mse_loss, l1_loss
-from data.types import *
+from utils.types import *
 import torchmetrics as tm
 import kornia.augmentation as K
-from kornia.geometry.keypoints import Keypoints
-from kornia.geometry.boxes import Boxes
-from rich import print
-import wandb
 import matplotlib.pyplot as plt
 import sklearn.metrics
 from utils.evaluate import *
-from utils.core import transparent_cmap
+
 
 class Augmenter(nn.Module):
 
