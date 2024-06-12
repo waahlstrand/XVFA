@@ -196,6 +196,7 @@ class SingleVertebraClassifier(L.LightningModule):
             "test_stage":   Augmenter(p_augmentation=0.0),
         })
         
+        # Image-based model
         self.model          = SingleVertebraClassifierModel(
             n_types=self.n_types,
             n_grades=self.n_grades,
@@ -425,20 +426,6 @@ class SingleVertebraClassifier(L.LightningModule):
         self.test_true = []
         self.test_pred = []
 
-    def prediction(self, keypoint_logits: Optional[Tensor], image_logits: Optional[Tensor]):
-
-        if not (self.ce_image_weight > 0):
-            pred = keypoint_logits.softmax(dim=1)
-
-        # If we have no keypoint classification, we use the image classification
-        elif not (self.ce_keypoint_weight > 0):
-            pred = image_logits.softmax(dim=1)
-
-        else: 
-            pred = image_logits.softmax(dim=1) * keypoint_logits.softmax(dim=1)
-
-        return pred
-
     def on_any_test_end(self, 
                         trues: Tensor, 
                         preds: Tensor, 
@@ -467,6 +454,7 @@ class SingleVertebraClassifier(L.LightningModule):
             raise ValueError(f"Number of classes {preds.shape[-1]} not supported")
         
         for group_name, groups in all_groups:
+
             # Compute ROC curve for a multi-class classification problem using the One-vs-Rest (OvR) strategy
             trues_binary, preds_grouped = grouped_classes(trues, preds, groups, n_classes=preds.shape[-1])
             # print(trues_binary.sum(), group_name)
