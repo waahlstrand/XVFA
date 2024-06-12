@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from data.types import *
+from utils.types import *
 
 class VertebraParameters(nn.Module):
 
@@ -259,10 +259,7 @@ class VertebraClassifier(nn.Module):
 
         grade_logits = torch.stack([normal, grad_1, grad_2, grad_3], dim=-1)       
 
-        return VertebraOutput(
-            grade_logits=grade_logits,
-            type_logits=type_logits
-        )
+        return grade_logits, type_logits
 
     
 class FuzzyWedgeClassifier(VertebraClassifier):
@@ -282,19 +279,17 @@ class FuzzyWedgeClassifier(VertebraClassifier):
 
     def forward(self, vertebrae: Tensor) -> VertebraOutput:
 
-        output = super().forward(vertebrae)
+        grade_logits, type_logits = super().forward(vertebrae)
 
-        normal      = output.type_logits[:, 0]
-        wedge       = output.type_logits[:, 1]
-        biconcave   = output.type_logits[:, 2]
-        crush       = output.type_logits[:, 3]
+        normal      = type_logits[:, 0]
+        wedge       = type_logits[:, 1]
+        biconcave   = type_logits[:, 2]
+        crush       = type_logits[:, 3]
 
-        wedge_like, _  = torch.stack([wedge, crush], dim=-1).max(dim=-1)
+        wedge_like, _  = torch.stack([wedge, crush], dim=-1).max(dim=-1) # wedge_like = wedge | crush
 
         type_logits = torch.stack([normal, wedge_like, biconcave], dim=-1)
 
-        return VertebraOutput(
-            grade_logits=output.grade_logits,
-            type_logits=type_logits
-        )
+        return grade_logits, type_logits
+
 
