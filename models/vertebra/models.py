@@ -28,8 +28,6 @@ class Augmenter(nn.Module):
 
         self.augmenter = K.AugmentationSequential(
             K.RandomInvert(p=self.p_augmentation),
-            # K.RandomHorizontalFlip(p=self.p_augmentation),
-            # K.RandomVerticalFlip(p=self.p_augmentation),
             K.RandomEqualize(p=self.p_augmentation),
             K.RandomSharpness(p=self.p_augmentation),
             K.RandomMedianBlur(p=self.p_augmentation),
@@ -94,12 +92,9 @@ class KeypointModel(nn.Module):
 
     def forward(self, z: Tensor) -> Tuple[Tensor, Tensor]:
 
-        # Predict the deviations from the base shape
+        # Predict the mode and scale of the keypoints
         x      = self.model(z)
         sigma   = self.sigma(z)
-
-        # x  = self.anchors + x.view(-1, self.n_keypoints, self.n_dim)
-        # x  = torch.clamp(x, 0, 1)
 
         return x, sigma
     
@@ -155,7 +150,7 @@ class SingleVertebraClassifierModel(nn.Module):
     def forward(self, x) -> Tuple[PointPrediction, Tensor, Tensor]:
 
         z               = self.features(x)
-        # mu, sigma       = self.keypoint_model(z).chunk(2, dim=1)
+        
         mu, sigma       = self.keypoint_model(z)
 
         type_logits     = self.type_model(z)
@@ -174,7 +169,6 @@ class SingleVertebraClassifier(L.LightningModule):
     def __init__(self, n_types: int = 3,
                        n_grades: int = 4, 
                        n_keypoints: int = 6, 
-                    #    tolerances: List[float] = [0.2, 0.25, 0.4],
                        tolerances: Dict[Literal["apr", "mpr", "mar"], List[float]] = {"apr": [0.2, 0.25, 0.4], "mpr": [0.2, 0.25, 0.4], "mar": [0.2, 0.25, 0.4]},
                        thresholds: Dict[Literal["apr", "mpr", "mar"], float] = {"apr": 1.0, "mpr": 1.0, "mar": 1.0},
                        prior: Literal["gaussian", "laplace"] = "gaussian",
@@ -270,8 +264,6 @@ class SingleVertebraClassifier(L.LightningModule):
 
         self.metrics    = nn.ModuleDict(metrics)
 
-        # self.test_true = {d: [] for d in range(10)}
-        # self.test_pred = {d: [] for d in range(10)}
         self.test_true = []
         self.test_pred = []
         self.test_idx  = []
