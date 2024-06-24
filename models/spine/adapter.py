@@ -114,9 +114,13 @@ class DINO(Detector):
                  use_ema: bool,
                  ema_decay: float,
                  ema_epoch: int,
-                 use_detached_boxes_dec_out: bool
+                 use_detached_boxes_dec_out: bool,
+                 finetune_ignore: Optional[List[str]] = None,
+                 vertebra_classifier_path: Optional[str] = None,
+                 random_forest_path: Optional[str] = None,
+                 level: Literal["vertebra", "patient"] = "vertebra"
                  ) -> None:
-        super().__init__()
+        super().__init__(vertebra_classifier_path=vertebra_classifier_path, random_forest_path=random_forest_path, level=level)
 
 
         self.n_keypoints = n_keypoints
@@ -225,3 +229,5 @@ class DINO(Detector):
         self.ema_decay = ema_decay
         self.ema_epoch = ema_epoch
         self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
+        self.finetune_ignore = finetune_ignore
+        self.vertebra_classifier_path = vertebra_classifier_path
