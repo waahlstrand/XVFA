@@ -613,23 +613,34 @@ class LikelihoodVisualizer(nn.Module):
         return likelihood, xx, yy
 
 
-    def visualize_uncertainty(self, image: Tensor, idx: int = 0) -> Tensor:
+    def visualize_uncertainty(self, images: Tensor, **kwargs) -> List[Tuple[plt.Figure, plt.Axes]]:
 
-        likelihood, xx, yy = self.get_likelihood(image)
+        if len(images.shape) == 3:
+            images = images.unsqueeze(0)
+
+        likelihood, xx, yy = self.get_likelihood(images)
         mycmap = transparent_cmap(plt.cm.Reds)
 
         # Plot the likelihood of the points
-        f, ax = plt.subplots(1, 1, figsize=(10, 10))
+        fs, axs = [], []
 
-        ax.imshow(image[idx,0].squeeze().cpu().numpy(), cmap="gray")
+        for image, ll in zip(images, likelihood):
+            f, ax = plt.subplots(1, 1, **kwargs)
 
-        for keypoint in range(self.n_keypoints):
-            ax.contourf(
-                yy.detach().cpu().numpy()*image.shape[-2],
-                xx.detach().cpu().numpy()*image.shape[-1],
-                likelihood[idx, keypoint, :, :].squeeze().cpu().numpy(),
-                15,
-                cmap=mycmap,
-                vmin=0,
-                vmax=likelihood[idx, keypoint, :, :].max().item()
-            )
+            ax.imshow(image[0].squeeze().cpu().numpy(), cmap="gray")
+
+            for keypoint in range(self.n_keypoints):
+                ax.contourf(
+                    yy.detach().cpu().numpy()*image.shape[-2],
+                    xx.detach().cpu().numpy()*image.shape[-1],
+                    ll[keypoint, :, :].squeeze().cpu().numpy(),
+                    15,
+                    cmap=mycmap,
+                    vmin=0,
+                    vmax=ll[keypoint, :, :].max().item()
+                )
+
+            fs.append(f)
+            axs.append(ax)
+
+        return fs, axs
