@@ -57,7 +57,6 @@ class HungarianMatcher(HungarianMatcher):
         # Also concat the target labels and boxes
         tgt_ids = torch.cat([v["labels"] for v in targets])
         tgt_bbox = torch.cat([v["boxes"] for v in targets])
-        tgt_weights = torch.cat([v["weights"] for v in targets]).unsqueeze(-1)
 
         # Compute the classification cost.
         alpha = self.focal_alpha
@@ -68,11 +67,11 @@ class HungarianMatcher(HungarianMatcher):
 
         # Compute the L1 cost between boxes
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
-        cost_bbox = cost_bbox #* tgt_weights.t()
+        cost_bbox = cost_bbox 
             
-        # Compute the giou cost betwen boxes            
+        # Compute the giou cost betwen boxes
         cost_giou = (1-generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox)))
-        cost_giou = cost_giou #* tgt_weights.t()
+        cost_giou = cost_giou
         
         # Final cost matrix
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
