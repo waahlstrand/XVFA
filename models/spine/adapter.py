@@ -1,9 +1,8 @@
 import lightning as L
 from typing import *
-from models.base import Detector
 
 
-class DINO(Detector):
+class DINO(L.LightningModule):
     """
     Adapter class for the DINO arguments, to ensure
     compatibility with the LightningCLI.
@@ -15,7 +14,7 @@ class DINO(Detector):
                  n_vertebra: int,
                  n_dims: int,
                  missing_weight: float,
-                 checkpoint: str,
+                 checkpoint_str: str,
                  num_classes: int,
                  num_queries: int,
                  num_select: int,
@@ -120,7 +119,7 @@ class DINO(Detector):
                  random_forest_path: Optional[str] = None,
                  level: Literal["vertebra", "patient"] = "vertebra"
                  ) -> None:
-        super().__init__(vertebra_classifier_path=vertebra_classifier_path, random_forest_path=random_forest_path, level=level)
+        super().__init__()
 
 
         self.n_keypoints = n_keypoints
@@ -129,7 +128,7 @@ class DINO(Detector):
         self.missing_weight = missing_weight
         # self.filter = filter
 
-        self.checkpoint = checkpoint
+        self.checkpoint = checkpoint_str
         self.num_classes = num_classes
         self.num_queries = num_queries
         self.num_select = num_select
