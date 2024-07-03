@@ -1,0 +1,21 @@
+name: superb
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  - pip
+  - ipykernel
+  - pytorch=2.2
+  - torchvision
+  - torchaudio
+  - lightning
+  - matplotlib
+  - scikit-learn
+  - pandas
+  - pip:
+    - kornia
+    # - git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI&egg=pycocotools
+    # - git+https://github.com/cocodataset/panopticapi.git#egg=panopticapi
+    - timm
