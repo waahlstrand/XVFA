@@ -3,9 +3,9 @@ from utils.types import Batch, Output
 import torch
 from torch import Tensor
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision.ops import roi_align
 import lightning as L
+import torchmetrics.detection.mean_ap
 from models.vertebra.models import SingleVertebraClassifier
 from utils.evaluate import *
 from utils.types import Batch
