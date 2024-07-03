@@ -1,6 +1,6 @@
 from typing import *
 
-from data.types import Batch, Output, Loss, Prediction, Target
+from utils.types import Batch, Output, Target
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -87,7 +87,6 @@ class SpineImageClassifier(L.LightningModule):
 
         # Losses
         loss_grades = F.cross_entropy(output["pred_grades"], grades, weight=self.grade_weights)
-        # loss_types  = F.cross_entropy(output["pred_types"], types, weight=self.type_weights)
 
         loss = loss_grades #+ loss_types
     
@@ -107,13 +106,13 @@ class SpineImageClassifier(L.LightningModule):
 
         return grades, types
     
-    def training_step(self, batch: Batch, batch_idx: int) -> Loss:
+    def training_step(self, batch: Batch, batch_idx: int) -> Tensor:
 
         loss, y, output = self.step(batch, batch_idx, "train_stage", on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
         return loss
     
-    def validation_step(self, batch: Batch, batch_idx: int) -> Loss:
+    def validation_step(self, batch: Batch, batch_idx: int) -> Tensor:
 
         loss, y, output = self.step(batch, batch_idx, "val_stage", on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
@@ -122,7 +121,7 @@ class SpineImageClassifier(L.LightningModule):
 
         return loss
     
-    def test_step(self, batch: Batch, batch_idx: int) -> Loss:
+    def test_step(self, batch: Batch, batch_idx: int) -> Tensor:
 
         loss, y, output = self.step(batch, batch_idx, "test_stage", on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
