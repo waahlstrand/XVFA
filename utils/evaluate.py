@@ -152,48 +152,106 @@ def confusion_matrix(
     return sklearn.metrics.confusion_matrix(y_true, y_pred, **kwargs)
 
 
-def classification_metrics(trues: Tensor, preds: Tensor, all_groups: List[Tuple[str, Tuple[List[int], List[int]]]]):
+def compute_classification_metrics(trues: Tensor, preds: Tensor, all_groups: List[Tuple[str, Tuple[List[int], List[int]]]], ids: Optional[List[str]] = None) -> Generator[Dict[str, float], None, None]:
 
     trues = trues.squeeze().cpu().numpy()
     preds = preds.cpu().numpy()
+    
+    if ids is not None:
+        assert len(ids) == trues.shape[0], "The length of ids must be equal to the number of samples in the dataset"
         
     for group_name, groups in all_groups:
-        # Compute ROC curve for a multi-class classification problem using the One-vs-Rest (OvR) strategy
-        trues_binary, preds_grouped = grouped_classes(trues, preds, groups, n_classes=preds.shape[-1])
 
-        roc = grouped_roc_ovr(trues, preds, groups, n_classes=preds.shape[-1])
+        d = {}
+
+        grouped = grouped_metrics(trues, preds, groups)
+        trues_grouped = grouped.pop("trues")
+        preds_grouped = grouped.pop("preds")
+        roc = grouped.pop("roc")
+
+        preds_thresh = (preds_grouped > roc["youden_threshold"]).astype(int)
+
+        metrics = classification_metrics(trues_grouped, preds_thresh)
+
+
+        if ids is not None:
+            df = pd.DataFrame({
+                "id": ids,
+                "true": trues_grouped,
+                "pred": preds_thresh,
+            })
             
-        # Compute relevant metrics
-        auc     = roc["roc_auc"]
-        youden  = roc["youden_threshold"]
-        preds_thresh   = (preds_grouped > youden).astype(int)
+            df = df.groupby("id").agg({"true": "max", "pred": "max"}).reset_index()
 
-        # Compute confusion matrix
-        cm = sklearn.metrics.confusion_matrix(trues_binary, preds_thresh, labels=[0,1])
+            patient_metrics = classification_metrics(df["true"].values, df["pred"].values)
 
-        # Compute metrics
-        # Sensitivity, specificity, precision, f1-score
-        sensitivity = cm[1, 1] / (cm[1, 1] + cm[1, 0])
-        specificity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
-        precision   = cm[1, 1] / (cm[1, 1] + cm[0, 1])
-        accuracy    = (cm[0, 0] + cm[1, 1]) / cm.sum()
+            d = {
+                **d,
+                **{f"patient_{k}": v for k, v in patient_metrics.items()},
+            }
 
-        # Get the prevalence of the positive class
-        prevalence = trues_binary.sum()  
 
-        f1_score    = 2 * (precision * sensitivity) / (precision + sensitivity)
-
-        yield {
-            "group_name": group_name,
-            "auc": auc,
-            "youden": youden,
-            "sensitivity": sensitivity,
-            "specificity": specificity,
-            "precision": precision,
-            "accuracy": accuracy,
-            "prevalence": prevalence,
-            "f1_score": f1_score
+        d = {
+            **d,
+            "auc": roc["roc_auc"],
+            **metrics,
         }
+
+        yield d
+
+def grouped_metrics(trues: np.ndarray, preds: np.ndarray, groups: Tuple[str, Tuple[List[int], List[int]]]) -> np.ndarray:
+    """
+    Group the true and predicted labels according to the provided groups.
+
+    Args:
+        y_true: True labels (n_samples)
+        y_pred: Predicted labels (n_samples)
+        groups: Tuple of lists of class indices e.g
+
+    Returns:
+
+    """
+    trues_binary, preds_grouped = grouped_classes(trues, preds, groups, n_classes=preds.shape[-1])
+
+    roc = grouped_roc_ovr(trues, preds, groups, n_classes=preds.shape[-1])
+
+    return {
+        "trues": trues_binary,
+        "preds": preds_grouped,
+        "roc": roc
+    }
+
+
+def classification_metrics(trues: np.ndarray, preds: np.ndarray) -> Dict[str, float]:
+
+    # Compute confusion matrix
+    cm = sklearn.metrics.confusion_matrix(trues, preds, labels=[0,1])
+
+    # Compute metrics
+    # Sensitivity, specificity, precision, f1-score
+    sensitivity = cm[1, 1] / (cm[1, 1] + cm[1, 0])
+    specificity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
+    precision   = cm[1, 1] / (cm[1, 1] + cm[0, 1])
+    accuracy    = (cm[0, 0] + cm[1, 1]) / cm.sum()
+
+    # Get the prevalence of the positive class
+    prevalence = trues.sum()  
+
+    f1_score    = 2 * (precision * sensitivity) / (precision + sensitivity)
+
+    d = {
+        "sensitivity": sensitivity,
+        "specificity": specificity,
+        "precision": precision,
+        "accuracy": accuracy,
+        "prevalence": prevalence,
+        "f1_score": f1_score,
+
+    }
+
+    return d
+
+
 
 def sample_model_likelihood(model, image, n_samples=1000) -> Tuple[Tensor, Tensor]:
 

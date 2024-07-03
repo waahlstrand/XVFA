@@ -20,7 +20,9 @@ from models.backbones.DINO.models.dino.deformable_transformer import build_defor
 from models.backbones.DINO.models.dino.utils import sigmoid_focal_loss, MLP
 
 from models.backbones.DINO.models.dino.dn_components import prepare_for_cdn,dn_post_process
-from models.backbones.DINO.models.dino.dino import DINO, PostProcess
+from models.backbones.DINO.models.dino.dino import DINO
+
+from models.spine.postprocessors import PostProcess
 
 def build_dino(args):
     # the `num_classes` naming here is somewhat misleading.

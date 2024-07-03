@@ -5,8 +5,9 @@ import lightning as L
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from rich import print
+import numpy as np
 import wandb
-from data.types import Batch
+from utils.types import Batch
 from models.backbones.DINO.util import box_ops
 
 
@@ -46,63 +47,39 @@ class SpinePlotCallback(L.Callback):
         self.on_batch_end(trainer, pl_module, outputs, batch, batch_idx, "val")
 
     def plot(self, outputs: Dict[str, Tensor], batch: Batch, module: L.LightningModule) -> Tuple[plt.Figure, plt.Axes]:
+        
+        f, ax = plt.subplots(1, self.n_samples, figsize=(10, 10))
 
-        postprocess = module.postprocessors["bbox"]
+        processed = module.postprocessors["bbox"](outputs, 
+                                                  torch.tensor(batch.original_sizes, 
+                                                               device=module.device))
+        
+        idxs = np.random.choice(range(len(batch.images)), self.n_samples, replace=False)
 
-        f, ax = plt.subplots(1, 1, squeeze=True, dpi=300)
-        offset = -20
+        for i, idx in enumerate(idxs):
 
-        nested, y = batch.x, batch.y
+            image = batch.images[idx][0].cpu().numpy()
 
-        images  = nested.tensors.detach().cpu().squeeze()
-        masks   = nested.mask.detach().cpu().squeeze()
-        sizes   = batch.original_sizes
+            ax[i].imshow(image, cmap="bone")
 
-        # Select a single random sample
-        idx = torch.randint(0, images.shape[0], (1,)).item()
+            ground_truth = batch.targets[idx].boxes[batch.targets[idx].indicator]
+            ground_truth = box_ops.box_cxcywh_to_xyxy(ground_truth).cpu().numpy()
+            boxes   = processed["boxes"][idx].cpu().numpy()
+            labels  = processed["labels"][idx].cpu().numpy()
+            size   = batch.original_sizes[idx]
 
-        image = images[idx][0][~masks[idx]].reshape(*sizes[idx])
+            for box, label in zip(boxes, labels):
+                x1, y1, x2, y2 = box
+                ax[i].add_patch(plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, edgecolor="red", lw=2))
+                ax[i].text(x1, y1, f"{label}", fontsize=8, color="red")
 
-        image_height, image_width = sizes[idx]
-        tensor_height, tensor_width = image.shape
+            for box in ground_truth:
+                x1, y1, x2, y2 = box
+                x1, y1, x2, y2 = x1 * size[1], y1 * size[0], x2 * size[1], y2 * size[0]
+                ax[i].add_patch(plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, edgecolor="green", lw=2))
 
-        # Plot image
-        ax.imshow(image, cmap="gray", origin="upper")
 
-        # Get ground truth
-        bboxes      = y[idx].boxes.detach().cpu()
-        indicators  = y[idx].indices.reshape(-1).detach().cpu()
-        true_labels = y[idx].labels.reshape(-1).detach().cpu()
-
-        # Remove keypoints that should not be plotted
-        bboxes      = bboxes.reshape(*indicators.shape, -1)[indicators.to(bboxes.device)].reshape(-1, 4)
-        true_labels = true_labels.reshape(*indicators.shape)[indicators.to(true_labels.device)].reshape(-1)
-
-        # Unnormalize bboxes
-        bboxes = box_ops.box_cxcywh_to_xyxy(bboxes)
-        bboxes = bboxes * torch.tensor([image_width, image_height, image_width, image_height], dtype=bboxes.dtype)
-
-        # Get predictions
-        pred_bboxes     = outputs["pred_boxes"][idx].detach().cpu()
-        processed       = postprocess(outputs, torch.tensor(sizes, device=outputs["pred_boxes"].device)) # List[Dict[str, Tensor]]
-        pred_bboxes     = processed[idx]["boxes"].detach().cpu()
-        pred_labels     = outputs["pred_logits"][idx].detach().cpu().softmax(-1).argmax(-1)
-
-        # Plot bounding boxes
-        for k in range(len(bboxes)):
-            label = true_labels[k].item()
-            box = bboxes[k]
-            x1, y1, x2, y2 = box
-            ax.add_patch(plt.Rectangle((x1, y1), x2 - x1, y2 - y1, fill=False, color="green", linewidth=1))
-            ax.text(x1 + offset, y1, f"{label}", color="green", fontsize=3)
-
-        # print(pred_bboxes.shape, pred_labels.shape)
-        for k in range(len(pred_bboxes)):
-            label = pred_labels[k].item()
-            box = pred_bboxes[k]
-            x1, y1, x2, y2 = box
-            ax.add_patch(plt.Rectangle((x1, y1), x2 - x1, y2 - y1, fill=False, color="red", linewidth=1))
-            ax.text(x1 + offset, y1, f"{label}", color="red", fontsize=3)
+            ax[i].axis("off")
 
         ground_truth = mpatches.Patch(color='green', label='Ground truth')
         predicted = mpatches.Patch(color='red', label='Predicted')
@@ -110,7 +87,7 @@ class SpinePlotCallback(L.Callback):
         plt.subplots_adjust(wspace=0.05, hspace=0.05)        
         plt.legend(handles=[ground_truth, predicted], bbox_to_anchor=(0, 1.02, 1, 0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=1)
 
-        if self.save_to_disk:
-            f.savefig(f"plot_test.png", bbox_inches="tight")
+        # if self.save_to_disk:
+        #     f.savefig(f"plot_test.png", bbox_inches="tight")
 
         return f, ax

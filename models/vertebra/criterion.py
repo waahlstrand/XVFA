@@ -12,8 +12,8 @@ class VertebraLoss(nn.Module):
                  n_keypoints: int = 6, 
                  n_dims: int = 2, 
                  prior: Literal["laplace", "gaussian"] = "laplace",
-                 grade_weights: Optional[List[float]] = None,
-                 type_weights: Optional[List[float]] = None,
+                 compression_weights: Optional[List[float]] = None,
+                 morphology_weights: Optional[List[float]] = None,
                  rle_weight: float = 1.0, 
                  ce_image_weight: float = 1.0,
                  ce_keypoint_weight: float = 1.0,
@@ -30,8 +30,8 @@ class VertebraLoss(nn.Module):
             n_keypoints (int, optional): The number of keypoints to predict. Defaults to 6.
             n_dims (int, optional): The number of dimensions of the keypoints. Defaults to 2.
             prior (Literal["laplace", "gaussian"], optional): The prior distribution for the RLE loss. Defaults to "laplace".
-            grade_weights (Optional[List[float]], optional): The weights for the grade classification. Defaults to None.
-            type_weights (Optional[List[float]], optional): The weights for the type classification. Defaults to None.
+            compression_weights (Optional[List[float]], optional): The weights for the grade classification. Defaults to None.
+            morphology_weights (Optional[List[float]], optional): The weights for the morphology classification. Defaults to None.
             rle_weight (float, optional): The weight for the RLE loss. Defaults to 1.0.
             ce_image_weight (float, optional): The weight for the cross-entropy loss for the image features. Defaults to 1.0.
             ce_keypoint_weight (float, optional): The weight for the cross-entropy loss for the keypoints. Defaults to 1.0.
@@ -42,18 +42,18 @@ class VertebraLoss(nn.Module):
         self.rle_weight = rle_weight
         self.ce_image_weight = ce_image_weight
         self.ce_keypoint_weight = ce_keypoint_weight
-        self.grade_weights = torch.FloatTensor(grade_weights) if grade_weights is not None else None
-        self.type_weights  = torch.FloatTensor(type_weights) if type_weights is not None else None
+        self.compression_weights = torch.FloatTensor(compression_weights) if compression_weights is not None else None
+        self.morphology_weights  = torch.FloatTensor(morphology_weights) if morphology_weights is not None else None
         self.rle = RLELoss(n_keypoints=n_keypoints, n_dims=n_dims, prior=prior)
-        self.ce_grade = nn.CrossEntropyLoss(weight=self.grade_weights)
-        self.ce_type = nn.CrossEntropyLoss(weight=self.type_weights)
+        self.ce_compression = nn.CrossEntropyLoss(weight=self.compression_weights)
+        self.ce_morphology = nn.CrossEntropyLoss(weight=self.morphology_weights)
 
 
     def forward(self,
                 prediction: VertebraPrediction,
                 keypoints: Tensor,
-                grades: Tensor,
-                types: Tensor,
+                compressions: Tensor,
+                morphologies: Tensor,
                 ) -> Tensor:
         """
         Calculate the loss for the fine vertebra model.
@@ -61,8 +61,8 @@ class VertebraLoss(nn.Module):
         Args:
             prediction (VertebraPrediction): The prediction from the model
             keypoints (Tensor): The ground truth keypoints
-            grades (Tensor): The ground truth grades
-            types (Tensor): The ground truth types
+            compressions (Tensor): The ground truth compressions
+            morphologies (Tensor): The ground truth morphologies
         
         Returns:
             Tensor: The loss
@@ -70,11 +70,11 @@ class VertebraLoss(nn.Module):
         
         rle = self.rle(prediction.keypoints.mu, prediction.keypoints.sigma, keypoints)
 
-        ce_keypoint_loss    = self.ce_type(prediction.keypoint_logits.types, types)
-        ce_keypoint_loss   += self.ce_grade(prediction.keypoint_logits.grades, grades)
+        ce_keypoint_loss    = self.ce_morphology(prediction.keypoint_logits.compression, morphologies)
+        ce_keypoint_loss   += self.ce_compression(prediction.keypoint_logits.morphology, compressions)
 
-        ce_image_loss       = self.ce_type(prediction.image_logits.types, types)
-        ce_image_loss      += self.ce_grade(prediction.image_logits.grades, grades)
+        ce_image_loss       = self.ce_morphology(prediction.image_logits.compression, morphologies)
+        ce_image_loss      += self.ce_compression(prediction.image_logits.morphology, compressions)
 
         loss =  self.rle_weight * rle + \
                 self.ce_image_weight * ce_image_loss + \
