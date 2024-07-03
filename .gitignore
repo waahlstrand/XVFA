@@ -167,3 +167,10 @@ test*
 
 # Remove checkpoints
 *.ckpt
+*.csv
+*.out
+
+# Remove logs
+logs/
+lightning_logs/
+configs/
