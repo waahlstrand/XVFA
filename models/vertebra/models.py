@@ -211,8 +211,8 @@ class SingleVertebraClassifier(L.LightningModule):
         # Loss function
         self.vertebra_loss  = VertebraLoss(n_keypoints=self.n_keypoints, 
                                            n_dims=2, prior=self.prior, 
-                                           grade_weights=self.grade_weights, 
-                                           type_weights=self.type_weights, 
+                                           compression_weights=self.grade_weights, 
+                                           morphology_weights=self.type_weights, 
                                            rle_weight=self.rle_weight, 
                                            ce_image_weight=self.ce_image_weight, 
                                            ce_keypoint_weight=self.ce_keypoint_weight)
@@ -262,7 +262,7 @@ class SingleVertebraClassifier(L.LightningModule):
     def step(self, batch: Batch, batch_idx: int, name: str = "", **kwargs) -> VertebraModelOutput:
         
         images = batch.images
-        keypoints, types, grades = batch.keypoints, batch.visual_grades, batch.morphological_grades
+        keypoints, compressions, morphologies = batch.keypoints, batch.compressions, batch.morphologies
         
         # Augment the images with keypoints
         x, keypoints = self.augmentations[name](images, keypoints)
@@ -273,7 +273,7 @@ class SingleVertebraClassifier(L.LightningModule):
         keypoints       = keypoints.reshape(*prediction.keypoints.mu.shape)
 
         # Compute the loss
-        loss = self.vertebra_loss(prediction, keypoints, grades, types)
+        loss = self.vertebra_loss(prediction, keypoints, compressions, morphologies)
 
         # Distance measure between mu and y
         distance = self.distance(prediction.keypoints.mu.detach(), keypoints.detach())
@@ -291,13 +291,13 @@ class SingleVertebraClassifier(L.LightningModule):
             images=images,
             true=VertebraOutput(
                 keypoints=PointPrediction(mu=keypoints), 
-                grades=grades, 
-                types=types
+                compression=compressions, 
+                morphology=morphologies
                 ),
             prediction=VertebraOutput(
                 keypoints=prediction.keypoints, 
-                grades=prediction.grades, 
-                types=prediction.types
+                compression=prediction.compression, 
+                morphology=prediction.morphology
                 )
 
         )
@@ -315,23 +315,23 @@ class SingleVertebraClassifier(L.LightningModule):
         """
 
         # Predict p(x | I) and p(c | I)
-        keypoints, img_grade_logits, img_type_logits = self.model(x)
+        keypoints, img_compression_logits, img_morphology_logits = self.model(x)
 
         # Predict p(c | x)
-        kp_grade_logits, kp_type_logits = self.classifier(keypoints.mu)
+        kp_compression_logits, kp_morphology_logits = self.classifier(keypoints.mu)
 
         ## For grades:
-        grades = self.combined_classification(kp_grade_logits, img_grade_logits)
+        compression = self.combined_classification(kp_compression_logits, img_compression_logits)
 
         ## For types:
-        types  = self.combined_classification(kp_type_logits, img_type_logits)
+        morphology  = self.combined_classification(kp_morphology_logits, img_morphology_logits)
 
         return VertebraPrediction(
             keypoints=PointPrediction(mu=keypoints.mu, sigma=keypoints.sigma),
-            grades=grades,
-            types=types,
-            image_logits=ClassPrediction(grades=img_grade_logits, types=img_type_logits),
-            keypoint_logits=ClassPrediction(grades=kp_grade_logits, types=kp_type_logits)
+            compression=compression,
+            morphology=morphology,
+            image_logits=ClassPrediction(compression=img_compression_logits, morphology=img_morphology_logits),
+            keypoint_logits=ClassPrediction(compression=kp_compression_logits, morphology=kp_morphology_logits)
         )  
 
 
@@ -358,8 +358,8 @@ class SingleVertebraClassifier(L.LightningModule):
         
         output = self.step(batch, batch_idx, name="val_stage", prog_bar=False, on_epoch=True, on_step=False, batch_size=batch.images.shape[0])
 
-        self.validation_true.append((output.true.types, output.true.grades))
-        self.validation_pred.append((output.prediction.types, output.prediction.grades))
+        self.validation_true.append((output.true.morphology, output.true.compression))
+        self.validation_pred.append((output.prediction.morphology, output.prediction.compression))
 
         return output
     
@@ -367,8 +367,8 @@ class SingleVertebraClassifier(L.LightningModule):
 
         output = self.step(batch, batch_idx, name="test_stage", prog_bar=False, on_epoch=True, on_step=False, batch_size=batch.images.shape[0])
 
-        self.test_true.append((output.true.types, output.true.grades))
-        self.test_pred.append((output.prediction.types, output.prediction.grades))
+        self.test_true.append((output.true.morphology, output.true.compression))
+        self.test_pred.append((output.prediction.morphology, output.prediction.compression))
 
         return output
 
