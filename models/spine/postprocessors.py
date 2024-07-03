@@ -12,7 +12,7 @@ class PostProcess(nn.Module):
         self.nms_iou_threshold = nms_iou_threshold
 
     @torch.no_grad()
-    def forward(self, outputs, target_sizes, not_to_xyxy=False, test=False):
+    def forward(self, outputs, target_sizes, not_to_xyxy=False, test=False, as_records=False):
         """ Perform the computation
         Parameters:
             outputs: raw outputs of the model
@@ -51,8 +51,18 @@ class PostProcess(nn.Module):
             item_indices = [nms(b, s, iou_threshold=self.nms_iou_threshold) for b,s in zip(boxes, scores)]
             item_indices = [i[:num_select] for i in item_indices]
 
-            results = [{'scores': s[i], 'labels': l[i], 'boxes': b[i]} for s, l, b, i in zip(scores, labels, boxes, item_indices)]
+            results = {'scores': torch.stack([s[i] for s, i in zip(scores, item_indices)], dim=0),
+                       'labels': torch.stack([l[i] for l, i in zip(labels, item_indices)], dim=0),
+                       'boxes': torch.stack([b[i] for b, i in zip(boxes, item_indices)], dim=0),
+                       'pred_boxes': torch.stack([b[i] for b, i in zip(boxes, item_indices)], dim=0),
+                       'pred_logits': torch.stack([s[i] for s, i in zip(scores, item_indices)], dim=0)}
+            
+            # results = [{'scores': s[i], 'labels': l[i], 'boxes': b[i]} for s, l, b, i in zip(scores, labels, boxes, item_indices)]
         else:
-            results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
+            # results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
+            if as_records:
+                results = {'scores': scores, 'labels': labels, 'boxes': boxes, 'pred_boxes': boxes, 'pred_logits': out_logits}
+            else:
+                results = {'scores': scores, 'labels': labels, 'boxes': boxes, 'pred_boxes': boxes, 'pred_logits': out_logits}
 
         return results
