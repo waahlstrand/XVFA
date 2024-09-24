@@ -8,6 +8,27 @@ from torch import Tensor
 import torch
 from models.vertebra.classifiers import VertebraParameters
 
+
+def detach_dict(d: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, Tensor):
+            out[k] = v.detach()
+        else:
+            out[k] = v
+
+    return out
+
+def dict_to_device(d: Dict[str, Tensor], device: torch.device) -> Dict[str, Tensor]:
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, Tensor):
+            out[k] = v.to(device)
+        else:
+            out[k] = v
+
+    return out
+
 def transparent_cmap(cmap, N=255):
     "Copy colormap and set alpha values"
 
@@ -180,6 +201,8 @@ def compute_classification_metrics(trues: Tensor, preds: Tensor, all_groups: Lis
                 "true": trues_grouped,
                 "pred": preds_thresh,
             })
+
+            print(df)
             
             df = df.groupby("id").agg({"true": "max", "pred": "max"}).reset_index()
 

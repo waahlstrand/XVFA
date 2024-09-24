@@ -13,6 +13,8 @@ from torchvision.transforms.functional import crop
 from torchvision.ops import box_convert
 import torch
 from torch import Tensor, tensor
+from models.backbones.DINO.util.misc import nested_tensor_from_tensor_list, NestedTensor
+
 
 @dataclass
 class BaseType:
@@ -134,7 +136,7 @@ class Batch(BaseType):
         y (List[Target]): The list of targets
         original_sizes (Optional[List[Tuple[int, int]]]): The original sizes of the images as inputed in the model
     """
-    images: Tensor
+    images: NestedTensor
     targets: Tuple[Target]
     original_sizes: Optional[Tuple[Tuple[int, int]]] = None
 

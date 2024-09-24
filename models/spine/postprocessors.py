@@ -3,7 +3,6 @@ import torch.nn as nn
 import models.backbones.DINO.util.box_ops as box_ops
 from torchvision.ops.boxes import nms
 
-
 class PostProcess(nn.Module):
     """ This module converts the model's output into the format expected by the coco api"""
     def __init__(self, num_select=100, nms_iou_threshold=-1) -> None:
@@ -25,12 +24,18 @@ class PostProcess(nn.Module):
 
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
-        
+
         prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), out_bbox.shape[1], dim=1)
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), num_select, dim=1)
         scores = topk_values
         topk_boxes = topk_indexes // out_logits.shape[2]
         labels = topk_indexes % out_logits.shape[2]
+
+        # Cheat for the matcher in evaluation, pred_logits is expected
+        # but we return the one-hot labels
+        pred_logits = torch.zeros((out_logits.shape[0], num_select, out_logits.shape[2]), device=out_logits.device)
+        pred_logits.scatter_(2, labels.unsqueeze(-1), 1)
+
         if not_to_xyxy:
             boxes = out_bbox
         else:
@@ -46,23 +51,42 @@ class PostProcess(nn.Module):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
-        if self.nms_iou_threshold > 0:
-            # print(self.nms_iou_threshold)
-            item_indices = [nms(b, s, iou_threshold=self.nms_iou_threshold) for b,s in zip(boxes, scores)]
-            item_indices = [i[:num_select] for i in item_indices]
+        if not as_records:
 
-            results = {'scores': torch.stack([s[i] for s, i in zip(scores, item_indices)], dim=0),
-                       'labels': torch.stack([l[i] for l, i in zip(labels, item_indices)], dim=0),
-                       'boxes': torch.stack([b[i] for b, i in zip(boxes, item_indices)], dim=0),
-                       'pred_boxes': torch.stack([b[i] for b, i in zip(boxes, item_indices)], dim=0),
-                       'pred_logits': torch.stack([s[i] for s, i in zip(scores, item_indices)], dim=0)}
-            
-            # results = [{'scores': s[i], 'labels': l[i], 'boxes': b[i]} for s, l, b, i in zip(scores, labels, boxes, item_indices)]
+            if self.nms_iou_threshold > 0:
+
+                item_indices = [nms(b, s, iou_threshold=self.nms_iou_threshold) for b,s in zip(boxes, scores)]
+                scores = torch.stack([s[i] for s, i in zip(scores, item_indices)])
+                labels = torch.stack([l[i] for l, i in zip(labels, item_indices)])
+                boxes = torch.stack([b[i] for b, i in zip(boxes, item_indices)])
+                pred_logits = torch.stack([l[i] for l, i in zip(pred_logits, item_indices)])
+
+            results = {
+                'scores': scores,
+                'labels': labels,
+                'boxes': boxes,
+            }
+
+            # Compatibility with matcher
+            results['pred_logits'] = pred_logits
+            results['pred_boxes'] = boxes
+
         else:
-            # results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
-            if as_records:
-                results = {'scores': scores, 'labels': labels, 'boxes': boxes, 'pred_boxes': boxes, 'pred_logits': out_logits}
+            if self.nms_iou_threshold > 0:
+                item_indices = [nms(b, s, iou_threshold=self.nms_iou_threshold) for b,s in zip(boxes, scores)]
+
+                results = [
+                    {
+                        'scores': s[i], 
+                        'labels': l[i], 
+                        'boxes': b[i], 
+                        'pred_boxes': b[i], 
+                        'pred_logits': p[i]
+                    } 
+                        for s, l, b, p, i in zip(scores, labels, boxes, pred_logits, item_indices)
+                ]
             else:
-                results = {'scores': scores, 'labels': labels, 'boxes': boxes, 'pred_boxes': boxes, 'pred_logits': out_logits}
+
+                results = [{'scores': s, 'labels': l, 'boxes': b, 'pred_boxes': b, 'pred_logits': p} for s, l, b, p in zip(scores, labels, boxes, pred_logits)]
 
         return results
