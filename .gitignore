@@ -174,3 +174,8 @@ test*
 logs/
 lightning_logs/
 configs/
+
+*.json
+*.pt
+*.png
+*.jpg
